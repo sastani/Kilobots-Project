@@ -1,0 +1,9 @@
+gcc -c -g -O2 -Wall -std=c99   ring.c -o ring.o
+gcc  -lsim -lSDL -lm -ljansson -o ring  ring.o 
+Undefined symbols for architecture x86_64:
+  "_main", referenced from:
+     implicit entry/start for main executable
+     (maybe you meant: _bot_main)
+ld: symbol(s) not found for architecture x86_64
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+make: *** [ring] Error 1
