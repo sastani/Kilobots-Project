@@ -4,14 +4,14 @@
 #ifndef SIMULATOR
    #include <kilolib.h>
     #include <avr/io.h>  // for microcontroller register defs
-    #include "ring.h"
+    #include "line.h"
     USERDATA myData;
     USERDATA *mydata = &myData;
 #else
     #include <math.h>
     #include <kilombo.h>
     #include <stdio.h> // for printf
-    #include "ring.h"
+    #include "line.h"
     REGISTER_USERDATA(USERDATA)
 #endif
 
@@ -254,23 +254,6 @@ void recv_joining(uint8_t *payload)
             mydata->red = 255;
         }
     }
-
-    /*if (mydata->my_id != mydata->my_left && mydata->my_id != mydata->my_right)
-    {
-        mydata->state = COOPERATIVE;
-        mydata->blue = 255;   
-        mydata->green = 255;
-        mydata->red = 255;
-    }*/
-
-    //mydata->my_right = mydata->nearest_neighbors[i].right_id;
-    //mydata->my_left = mydata->nearest_neighbors[i].id;
-/*
-    mydata->state = COOPERATIVE;
-    mydata->blue = 255;   
-    mydata->green = 255;
-    mydata->red = 255;    
-*/
 }
 
 void recv_move(uint8_t *payload)
@@ -459,44 +442,31 @@ void move(uint8_t tick)
 
 void recv_elect(uint8_t *payload)
 {
-    if(payload[RECEIVER] == mydata->my_id){
-        //printf("ID: %d rcved msg from ID: %d\n", payload[RECEIVER], payload[SENDER]);
-        if (payload[LEADER] > mydata->my_id)
-        {
+    printf("My ID is: %d, I received a message from ID: %d with intended recv ID: %d\n", mydata->my_id, payload[SENDER], payload[RECEIVER]);
+    if(mydata->my_id == payload[LEADER]){
+        //do nothing
+    }
+    else{
+        //if current robot has not received msg about its leader
+        if(!(mydata->has_decided)){
+            //printf("ID: %d rcved msg from ID: %d\n", payload[RECEIVER], payload[SENDER]);
             mydata->is_leader = 0;
             mydata->has_decided = 1;
-            
-            mydata->red = 255;
-            mydata->green = 255;
+            //turn robot blue if it has received message about its leader
+            mydata->red = 0;
+            mydata->green = 0;
             mydata->blue = 255;
-            
-            if (payload[LEADER] > mydata->leader_id)
-            {
-                mydata->leader_id = payload[LEADER];
-            }
-            if (!enqueue_message(ELECT))
-            {
-                mydata->queue_elect = 1;
-            }
-            else {
-    #ifdef SIMULATOR
-                //printf("PASS_ELECT - id: %d, right: %d, left: %d, state: %d, leadid: %d, islead: %d, hasdecided: %d\n", mydata->my_id, mydata->my_right, mydata->my_left, mydata->state, mydata->leader_id, mydata->is_leader, mydata->has_decided);
-    #endif
-            }
+        
+            mydata->leader_id = payload[LEADER];
         }
-        else if (payload[LEADER] == mydata->my_id)
+        if (!enqueue_message(ELECT))
         {
-    #ifdef SIMULATOR
-                    //printf("ELECT_FIN - id: %d, right: %d, left: %d, state: %d, leadid: %d, islead: %d, hasdecided: %d\n", mydata->my_id, mydata->my_right, mydata->my_left, mydata->state, mydata->leader_id, mydata->is_leader, mydata->has_decided);
-    #endif
-                    mydata->is_leader = 1;
-                    mydata->has_decided = 1;
-                    mydata->leader_id = mydata->my_id;
-            
-                    mydata->red = 0;
-                    mydata->green = 255;
-                    mydata->blue = 0;
-            
+            mydata->queue_elect = 1;
+        }
+        else {
+#ifdef SIMULATOR
+            //printf("PASS_ELECT - id: %d, right: %d, left: %d, state: %d, leadid: %d, islead: %d, hasdecided: %d\n", mydata->my_id, mydata->my_right, mydata->my_left, mydata->state, mydata->leader_id, mydata->is_leader, mydata->has_decided);
+#endif
         }
     }
 }
@@ -558,27 +528,6 @@ void reset_data()
     mydata->has_decided = 0;
     mydata->leader_id = mydata->my_id;
 }
-
-
-
-/**
- * If a node has 2 neighbors, check their ++shift_down_counter;color ids.
- * If any of those ids are equal to our current node, recompute the id using the 6 color algorithm.
- * If the new color id is still equal to a neighbor, then delay execution for a period so that another node can recalculate its id instead.
- **/
-void check_neighbor_colors()
-{   
-    if (mydata->my_left == mydata->my_id || mydata->my_right == mydata->my_id)  // Invalid neighbors, so just break
-        return;
-    uint8_t left_color_id, right_color_id;
-    left_color_id = mydata->nearest_neighbors[exists_nearest_neighbor(mydata->my_left)].color_id;
-    right_color_id = mydata->nearest_neighbors[exists_nearest_neighbor(mydata->my_right)].color_id;
-    if (mydata->color_id == left_color_id || mydata->color_id == right_color_id)
-    {
-        mydata->color_id = mydata->my_id;
-    }    
-}
-
 
 /**
  * Checks to see if messages have been recieved by all neighbors.
@@ -652,25 +601,6 @@ void set_closest_neighbors()
 #endif*/
 }
 
-void perform_leader_election(){
-    if (mydata->state == COOPERATIVE && mydata->has_decided == 0)
-    {
-        if (mydata->leader_counter < 30)
-            mydata->leader_counter++;
-        else if (!isQueueFull())
-        {
-#ifdef SIMULATOR
-            printf("Sending Elect %d, to %d\n", mydata->my_id, mydata->my_right);
-#endif
-            enqueue_message(ELECT);
-            mydata->has_decided = 1;
-            mydata->red = 0;
-            mydata->green = 0;
-            mydata->blue = 255;
-        }
-    }
-}
-
 void move_towards_leader(){
     if(mydata->state == COOPERATIVE && mydata->has_decided == 1){
         
@@ -698,17 +628,8 @@ void select_leader(){
         mydata->red = 0;
         mydata->green = 255;
         mydata->blue = 0;
-        
     }
-    
-    /*
-        int lead = mydata->nearest_neighbors[0].id;
-        for (i=0; i<mydata->num_neighbors; i++)
-        {
-            if (mydata->nearest_neighbors[i].id < lead)
-                lead = mydata->nearest_neighbors[i].id;
-        }
-        return lead;*/
+
 }
 /**
  * Modified loop which accounts for messages received.
@@ -717,6 +638,8 @@ void select_leader(){
  **/
 void loop()
 {
+    select_leader();
+
     delay(30);
 
     check_elect_queue();    // If for some reason message queue was full, make sending the elect top priority
@@ -724,7 +647,6 @@ void loop()
     //print_state();                          // Debugging text.
     
     //perform_leader_election();
-    select_leader();
     //send_move();
     send_joining();
     send_sharing();
@@ -801,7 +723,6 @@ void setup() {
 
     mydata->loop_counter = 0;
     mydata->round_counter = 0;
-    mydata->shift_down_counter = 0;
     mydata->color_id = mydata->my_id;
     mydata->leader_counter = 0;
     mydata->is_leader = 0;
@@ -828,11 +749,10 @@ char *cb_botinfo(void)
 }
 #endif
 
-int main() {
+void main() {
     kilo_init();
     kilo_message_tx = message_tx;
     kilo_message_tx_success = message_tx_success;
     kilo_message_rx = message_rx;
     kilo_start(setup, loop);
-    return 0;
 }
